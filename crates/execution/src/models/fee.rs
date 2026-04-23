@@ -19,7 +19,7 @@ use nautilus_model::{
     orders::{Order, OrderAny},
     types::{Money, Price, Quantity},
 };
-use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::{Decimal, prelude::ToPrimitive};
 
 pub trait FeeModel {
     /// Calculates commission for a fill.
@@ -40,6 +40,7 @@ pub trait FeeModel {
 pub enum FeeModelAny {
     Fixed(FixedFeeModel),
     MakerTaker(MakerTakerFeeModel),
+    Polymarket(PolymarketFeeModel),
     PerContract(PerContractFeeModel),
 }
 
@@ -54,6 +55,9 @@ impl FeeModel for FeeModelAny {
         match self {
             Self::Fixed(model) => model.get_commission(order, fill_quantity, fill_px, instrument),
             Self::MakerTaker(model) => {
+                model.get_commission(order, fill_quantity, fill_px, instrument)
+            }
+            Self::Polymarket(model) => {
                 model.get_commission(order, fill_quantity, fill_px, instrument)
             }
             Self::PerContract(model) => {
@@ -202,11 +206,76 @@ impl FeeModel for MakerTakerFeeModel {
     }
 }
 
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "python",
+    pyo3::pyclass(
+        module = "nautilus_trader.core.nautilus_pyo3.execution",
+        from_py_object
+    )
+)]
+#[cfg_attr(
+    feature = "python",
+    pyo3_stub_gen::derive::gen_stub_pyclass(module = "nautilus_trader.execution")
+)]
+pub struct PolymarketFeeModel;
+
+impl FeeModel for PolymarketFeeModel {
+    fn get_commission(
+        &self,
+        order: &OrderAny,
+        fill_quantity: Quantity,
+        fill_px: Price,
+        instrument: &InstrumentAny,
+    ) -> anyhow::Result<Money> {
+        let liquidity_side = match order.liquidity_side() {
+            Some(LiquiditySide::Maker) => return Ok(Money::zero(instrument.quote_currency())),
+            Some(LiquiditySide::Taker) => LiquiditySide::Taker,
+            Some(LiquiditySide::NoLiquiditySide) | None => anyhow::bail!("Liquidity side not set"),
+        };
+
+        let InstrumentAny::BinaryOption(binary_option) = instrument else {
+            anyhow::bail!(
+                "PolymarketFeeModel requires BinaryOption instrument, got {}",
+                instrument.id()
+            );
+        };
+
+        let commission = compute_polymarket_commission(
+            binary_option.taker_fee,
+            fill_quantity.as_decimal(),
+            fill_px.as_decimal(),
+            liquidity_side,
+        );
+
+        Ok(Money::from_decimal(
+            commission,
+            instrument.quote_currency(),
+        )?)
+    }
+}
+
+fn compute_polymarket_commission(
+    fee_rate: Decimal,
+    size: Decimal,
+    price: Decimal,
+    liquidity_side: LiquiditySide,
+) -> Decimal {
+    if liquidity_side != LiquiditySide::Taker || fee_rate.is_zero() {
+        return Decimal::ZERO;
+    }
+
+    (size * fee_rate * price * (Decimal::ONE - price)).round_dp(5)
+}
+
 #[cfg(test)]
 mod tests {
     use nautilus_model::{
         enums::{LiquiditySide, OrderSide, OrderType},
-        instruments::{Instrument, InstrumentAny, stubs::audusd_sim},
+        instruments::{
+            Instrument, InstrumentAny,
+            stubs::{audusd_sim, binary_option},
+        },
         orders::{
             Order,
             builder::OrderTestBuilder,
@@ -216,7 +285,9 @@ mod tests {
     };
     use rstest::rstest;
 
-    use super::{FeeModel, FixedFeeModel, MakerTakerFeeModel, PerContractFeeModel};
+    use super::{
+        FeeModel, FixedFeeModel, MakerTakerFeeModel, PerContractFeeModel, PolymarketFeeModel,
+    };
 
     #[rstest]
     fn test_fixed_model_single_fill() {
@@ -382,5 +453,52 @@ mod tests {
     fn test_per_contract_fee_model_negative_commission_fails() {
         let result = PerContractFeeModel::new(Money::new(-1.0, Currency::USD()));
         assert!(result.is_err());
+    }
+
+    #[rstest]
+    fn test_polymarket_fee_model_taker_commission() {
+        let fee_model = PolymarketFeeModel;
+        let mut binary = binary_option();
+        binary.maker_fee = rust_decimal::Decimal::ZERO;
+        binary.taker_fee = rust_decimal::Decimal::from_str_exact("0.072").unwrap();
+        let instrument = InstrumentAny::BinaryOption(binary);
+        let price = Price::from("0.66");
+        let limit_order = OrderTestBuilder::new(OrderType::Limit)
+            .instrument_id(instrument.id())
+            .side(OrderSide::Buy)
+            .price(price)
+            .quantity(Quantity::from("1.515152"))
+            .build();
+
+        let fill =
+            TestOrderStubs::make_filled_order(&limit_order, &instrument, LiquiditySide::Taker);
+        let commission = fee_model
+            .get_commission(&fill, Quantity::from("1.515152"), price, &instrument)
+            .unwrap();
+
+        assert_eq!(commission, Money::from("0.02448 USDC"));
+    }
+
+    #[rstest]
+    fn test_polymarket_fee_model_maker_commission_is_zero() {
+        let fee_model = PolymarketFeeModel;
+        let mut binary = binary_option();
+        binary.taker_fee = rust_decimal::Decimal::from_str_exact("0.072").unwrap();
+        let instrument = InstrumentAny::BinaryOption(binary);
+        let price = Price::from("0.66");
+        let limit_order = OrderTestBuilder::new(OrderType::Limit)
+            .instrument_id(instrument.id())
+            .side(OrderSide::Sell)
+            .price(price)
+            .quantity(Quantity::from("1.515152"))
+            .build();
+
+        let fill =
+            TestOrderStubs::make_filled_order(&limit_order, &instrument, LiquiditySide::Maker);
+        let commission = fee_model
+            .get_commission(&fill, Quantity::from("1.515152"), price, &instrument)
+            .unwrap();
+
+        assert_eq!(commission, Money::zero(Currency::USDC()));
     }
 }

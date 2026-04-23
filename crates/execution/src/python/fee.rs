@@ -19,7 +19,9 @@ use nautilus_core::python::to_pyruntime_err;
 use nautilus_model::types::Money;
 use pyo3::prelude::*;
 
-use crate::models::fee::{FixedFeeModel, MakerTakerFeeModel, PerContractFeeModel};
+use crate::models::fee::{
+    FixedFeeModel, MakerTakerFeeModel, PerContractFeeModel, PolymarketFeeModel,
+};
 
 #[pymethods]
 #[pyo3_stub_gen::derive::gen_stub_pymethods]
@@ -64,6 +66,19 @@ impl PerContractFeeModel {
     #[new]
     fn py_new(commission: Money) -> PyResult<Self> {
         Self::new(commission).map_err(to_pyruntime_err)
+    }
+
+    fn __repr__(&self) -> String {
+        format!("{self:?}")
+    }
+}
+
+#[pymethods]
+#[pyo3_stub_gen::derive::gen_stub_pymethods]
+impl PolymarketFeeModel {
+    #[new]
+    fn py_new() -> Self {
+        Self
     }
 
     fn __repr__(&self) -> String {
