@@ -38,6 +38,9 @@ fn data_to_pyobject(py: Python<'_>, item: Data) -> PyResult<Py<PyAny>> {
         Data::Depth10(depth) => Py::new(py, *depth).map(|x| x.into_any()),
         Data::IndexPriceUpdate(price) => Py::new(py, price).map(|x| x.into_any()),
         Data::MarkPriceUpdate(price) => Py::new(py, price).map(|x| x.into_any()),
+        Data::Instrument(_) => Err(PyIOError::new_err(
+            "Data::Instrument cannot be converted to a Python object",
+        )),
         Data::InstrumentStatus(status) => Py::new(py, status).map(|x| x.into_any()),
         Data::InstrumentClose(close) => Py::new(py, close).map(|x| x.into_any()),
         Data::Custom(custom) => Py::new(py, custom).map(|x| x.into_any()),

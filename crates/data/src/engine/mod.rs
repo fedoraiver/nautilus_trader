@@ -971,6 +971,10 @@ impl DataEngine {
                 self.handle_index_price(index_price);
                 self.drain_deferred_commands();
             }
+            Data::Instrument(instrument) => {
+                self.handle_instrument(instrument.as_ref());
+                self.drain_deferred_commands();
+            }
             Data::InstrumentStatus(status) => {
                 self.handle_instrument_status(status);
                 self.drain_deferred_commands();

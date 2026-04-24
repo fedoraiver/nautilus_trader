@@ -25,6 +25,7 @@ use nautilus_model::data::{Data, HasTsInit};
 #[derive(Debug, Eq, PartialEq)]
 struct HeapEntry {
     ts: UnixNanos,
+    data_priority: i32,
     priority: i32,
     index: usize,
 }
@@ -34,6 +35,7 @@ impl Ord for HeapEntry {
         // min-heap on ts, then priority sign (+/-) then index
         self.ts
             .cmp(&other.ts)
+            .then_with(|| self.data_priority.cmp(&other.data_priority))
             .then_with(|| self.priority.cmp(&other.priority))
             .then_with(|| self.index.cmp(&other.index))
             .reverse() // BinaryHeap is max by default -> reverse for min behaviour
@@ -83,7 +85,7 @@ impl BacktestDataIterator {
         }
 
         // Ensure sorted by ts_init
-        data.sort_by_key(HasTsInit::ts_init);
+        data.sort_by_key(|d| (d.ts_init(), d.replay_priority()));
 
         let priority = if let Some(p) = self.priorities.get(name) {
             // Replace existing stream – remove previous traces then re-insert below.
@@ -167,6 +169,7 @@ impl BacktestDataIterator {
         if next_index < stream_vec.len() {
             self.heap.push(HeapEntry {
                 ts: stream_vec[next_index].ts_init(),
+                data_priority: stream_vec[next_index].replay_priority(),
                 priority: entry.priority,
                 index: next_index,
             });
@@ -205,6 +208,7 @@ impl BacktestDataIterator {
             if idx < vec.len() {
                 self.heap.push(HeapEntry {
                     ts: vec[idx].ts_init(),
+                    data_priority: vec[idx].replay_priority(),
                     priority,
                     index: idx,
                 });

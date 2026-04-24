@@ -374,7 +374,7 @@ impl BacktestEngine {
         let mut to_add = data;
 
         if sort {
-            to_add.sort_by_key(HasTsInit::ts_init);
+            to_add.sort_by_key(|d| (d.ts_init(), d.replay_priority()));
         }
 
         if validate {
@@ -1031,6 +1031,9 @@ impl BacktestEngine {
                 Data::Quote(quote) => exchange.process_quote_tick(quote),
                 Data::Trade(trade) => exchange.process_trade_tick(trade),
                 Data::Bar(bar) => exchange.process_bar(*bar),
+                Data::Instrument(instrument) => {
+                    exchange.process_instrument(instrument.as_ref().clone());
+                }
                 Data::InstrumentStatus(status) => exchange.process_instrument_status(*status),
                 Data::InstrumentClose(close) => exchange.process_instrument_close(*close),
                 Data::Depth10(depth) => exchange.process_order_book_depth10(depth),

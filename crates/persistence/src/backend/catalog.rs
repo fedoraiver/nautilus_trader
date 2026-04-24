@@ -384,6 +384,7 @@ impl ParquetDataCatalog {
         let mut bars: Vec<Bar> = Vec::new();
         let mut mark_prices: Vec<MarkPriceUpdate> = Vec::new();
         let mut index_prices: Vec<IndexPriceUpdate> = Vec::new();
+        let mut instruments: Vec<InstrumentAny> = Vec::new();
         let mut statuses: Vec<InstrumentStatus> = Vec::new();
         let mut closes: Vec<InstrumentClose> = Vec::new();
         // Group custom data by full DataType identity (type_name + identifier + metadata)
@@ -422,6 +423,9 @@ impl ParquetDataCatalog {
                 Data::IndexPriceUpdate(p) => {
                     index_prices.push(p);
                 }
+                Data::Instrument(i) => {
+                    instruments.push(*i);
+                }
                 Data::InstrumentStatus(s) => {
                     statuses.push(s);
                 }
@@ -434,8 +438,7 @@ impl ParquetDataCatalog {
             }
         }
 
-        // Instruments are handled separately via write_instruments method
-
+        self.write_instruments(instruments)?;
         self.write_to_parquet(deltas, start, end, skip_disjoint_check)?;
         self.write_to_parquet(depth10s, start, end, skip_disjoint_check)?;
         self.write_to_parquet(quotes, start, end, skip_disjoint_check)?;
