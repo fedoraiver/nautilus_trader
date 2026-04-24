@@ -209,6 +209,15 @@ impl OrderMatchingEngine {
         }
     }
 
+    /// Updates the instrument definition used for validation and matching.
+    ///
+    /// This preserves order book and order state while allowing venue-side
+    /// definition changes such as tick-size updates to take effect.
+    pub fn update_instrument(&mut self, instrument: InstrumentAny) {
+        self.core.price_increment = instrument.price_increment();
+        self.instrument = instrument;
+    }
+
     /// Sets the event handler for dispatching order events.
     ///
     /// When set, events are routed through the handler instead of directly

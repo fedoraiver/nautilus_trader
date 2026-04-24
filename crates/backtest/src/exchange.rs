@@ -386,6 +386,33 @@ impl SimulatedExchange {
         Ok(())
     }
 
+    /// Processes an instrument definition update.
+    ///
+    /// Existing matching engines keep their order book and order state while
+    /// adopting the new instrument precision and increment metadata.
+    ///
+    /// # Panics
+    ///
+    /// Panics if adding a missing instrument to the exchange fails.
+    pub fn process_instrument(&mut self, instrument: InstrumentAny) {
+        for module in &self.modules {
+            module.pre_process(&Data::Instrument(Box::new(instrument.clone())));
+        }
+
+        let instrument_id = instrument.id();
+        if let Err(e) = self.cache.borrow_mut().add_instrument(instrument.clone()) {
+            log::error!("Error adding instrument {instrument_id} to cache: {e}");
+        }
+        self.instruments.insert(instrument_id, instrument.clone());
+
+        if let Some(matching_engine) = self.matching_engines.get_mut(&instrument_id) {
+            matching_engine.update_instrument(instrument);
+            log::info!("Updated instrument {instrument_id} on matching engine");
+        } else if let Err(e) = self.add_instrument(instrument) {
+            panic!("Failed to add instrument {instrument_id}: {e}");
+        }
+    }
+
     /// Returns the best bid price for the given instrument, if available.
     #[must_use]
     pub fn best_bid_price(&self, instrument_id: InstrumentId) -> Option<Price> {
