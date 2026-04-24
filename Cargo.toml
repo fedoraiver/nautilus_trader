@@ -7,6 +7,7 @@ members = [
   "crates/adapters/binance",
   "crates/adapters/bitmex",
   "crates/adapters/blockchain",
+  "crates/adapters/chainlink",
   "crates/adapters/bybit",
   "crates/adapters/databento",
   "crates/adapters/deribit",
@@ -96,6 +97,7 @@ nautilus-architect-ax = { path = "crates/adapters/architect_ax", version = "0.56
 nautilus-binance = { path = "crates/adapters/binance", version = "0.56.0", default-features = false }
 nautilus-bitmex = { path = "crates/adapters/bitmex", version = "0.56.0", default-features = false }
 nautilus-blockchain = { path = "crates/adapters/blockchain", version = "0.56.0" }
+nautilus-chainlink = { path = "crates/adapters/chainlink", version = "0.56.0", default-features = false }
 nautilus-bybit = { path = "crates/adapters/bybit", version = "0.56.0", default-features = false }
 nautilus-coinbase = { path = "crates/adapters/coinbase", version = "0.56.0", default-features = false }
 nautilus-databento = { path = "crates/adapters/databento", version = "0.56.0", default-features = false }
